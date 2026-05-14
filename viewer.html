@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>🎬 CineSync — Viewer</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #080810;
+  --surface: #10101e;
+  --surface2: #181828;
+  --border: #252540;
+  --accent: #e05fff;
+  --accent2: #5fffb0;
+  --accent3: #ffcf5f;
+  --text: #eeeeff;
+  --muted: #6666a0;
+  --danger: #ff5f7e;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; }
+body::before { content:''; position:fixed; inset:0; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E"); opacity:0.4; pointer-events:none; z-index:0; }
+
+.app { position:relative; z-index:1; padding:16px; max-width:520px; margin:0 auto; }
+
+/* HEADER */
+.header { display:flex; align-items:center; gap:12px; margin-bottom:20px; padding-top:8px; }
+.logo { width:38px; height:38px; background:linear-gradient(135deg,var(--accent),var(--accent2)); border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:18px; }
+.header h1 { font-family:'Syne',sans-serif; font-size:18px; font-weight:800; }
+.viewer-badge { margin-left:auto; padding:4px 10px; background:var(--accent2)22; border:1px solid var(--accent2)55; border-radius:20px; font-size:11px; font-weight:600; color:var(--accent2); font-family:'Syne',sans-serif; }
+
+/* TABS */
+.tabs { display:flex; background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:4px; gap:4px; margin-bottom:18px; }
+.tab { flex:1; padding:9px 4px; text-align:center; font-size:12px; font-weight:600; font-family:'Syne',sans-serif; border-radius:10px; cursor:pointer; transition:all 0.2s; color:var(--muted); border:none; background:none; }
+.tab.active { background:var(--surface2); color:var(--text); box-shadow:0 2px 8px #00000060; }
+
+.panel { display:none; }
+.panel.active { display:block; }
+
+/* CARDS */
+.card { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:16px; margin-bottom:14px; }
+.card-label { font-family:'Syne',sans-serif; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.12em; color:var(--muted); margin-bottom:12px; display:flex; align-items:center; gap:6px; }
+.card-label::after { content:''; flex:1; height:1px; background:var(--border); }
+
+/* WAITING */
+.waiting-screen { text-align:center; padding:40px 20px; }
+.waiting-screen .big-icon { font-size:56px; margin-bottom:16px; animation:bob 2s ease-in-out infinite; }
+@keyframes bob { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-10px);} }
+.waiting-screen h2 { font-family:'Syne',sans-serif; font-size:20px; font-weight:800; margin-bottom:8px; }
+.waiting-screen p { font-size:13px; color:var(--muted); line-height:1.6; }
+.pulse-dot { display:inline-block; width:10px; height:10px; border-radius:50%; background:var(--accent2); animation:pulse 2s infinite; margin-right:6px; }
+@keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.2;} }
+
+/* VIDEO */
+video { width:100%; border-radius:12px; background:#000; display:block; }
+.status-bar { display:flex; align-items:center; justify-content:space-between; padding:10px 0 4px; }
+.status-left { display:flex; align-items:center; gap:8px; font-size:13px; }
+.live-dot { width:8px; height:8px; border-radius:50%; background:var(--accent2); animation:pulse 2s infinite; }
+.status-sub { font-size:11px; color:var(--muted); }
+
+/* CHAT */
+.chat-box { height:300px; overflow-y:auto; background:var(--bg); border:1px solid var(--border); border-radius:12px; padding:10px; margin-bottom:10px; display:flex; flex-direction:column; gap:6px; }
+.chat-msg { display:flex; gap:8px; align-items:flex-start; }
+.chat-msg.mine { flex-direction:row-reverse; }
+.chat-avatar { width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:13px; flex-shrink:0; }
+.chat-bubble { max-width:75%; padding:7px 11px; border-radius:12px; font-size:13px; line-height:1.4; }
+.chat-msg:not(.mine) .chat-bubble { background:var(--surface2); border:1px solid var(--border); }
+.chat-msg.mine .chat-bubble { background:var(--accent2)22; border:1px solid var(--accent2)44; }
+.chat-name { font-size:10px; color:var(--muted); margin-bottom:2px; font-weight:600; }
+.chat-input-row { display:flex; gap:8px; }
+.chat-input { flex:1; background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:10px 14px; font-size:14px; color:var(--text); font-family:'DM Sans',sans-serif; outline:none; }
+.chat-input:focus { border-color:var(--accent2)77; }
+.chat-send { padding:10px 16px; background:var(--accent2); color:#080810; border:none; border-radius:10px; font-size:18px; cursor:pointer; font-weight:700; }
+
+/* REACTIONS */
+.reactions-bar { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+.rxn-btn { padding:8px 14px; background:var(--surface2); border:1px solid var(--border); border-radius:20px; font-size:18px; cursor:pointer; transition:transform 0.15s; }
+.rxn-btn:active { transform:scale(1.35); }
+.rxn-float { position:fixed; font-size:32px; pointer-events:none; z-index:999; animation:floatUp 2s ease-out forwards; }
+@keyframes floatUp { 0%{opacity:1;transform:translateY(0)scale(1);} 100%{opacity:0;transform:translateY(-180px)scale(1.5);} }
+
+/* NAME SETUP */
+.name-row { display:flex; gap:8px; margin-bottom:14px; }
+.btn { padding:11px 18px; border:none; border-radius:10px; font-size:13px; font-weight:600; font-family:'Syne',sans-serif; cursor:pointer; transition:all 0.15s; }
+.btn-green { background:var(--accent2); color:#080810; }
+.btn-ghost { background:var(--surface2); color:var(--text); border:1px solid var(--border); }
+
+/* LUDO VIEWER */
+.ludo-board { display:grid; grid-template-columns:repeat(11,1fr); gap:2px; background:var(--border); border:2px solid var(--border); border-radius:10px; padding:4px; margin-bottom:14px; }
+.ludo-board div { aspect-ratio:1; border-radius:3px; display:flex; align-items:center; justify-content:center; font-size:9px; position:relative; }
+.ludo-piece { width:14px; height:14px; border-radius:50%; border:2px solid rgba(255,255,255,0.4); position:absolute; font-size:8px; display:flex; align-items:center; justify-content:center; font-weight:700; z-index:2; transition:all 0.3s; }
+.piece-r { background:#ff5f7e; }
+.piece-g { background:#5fffb0; color:#080810; }
+.piece-b { background:#5fafff; }
+.piece-y { background:#ffcf5f; color:#080810; }
+.ludo-log { height:80px; overflow-y:auto; background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:8px; font-size:11px; color:var(--muted); line-height:1.8; }
+.turn-display { padding:10px 14px; background:var(--surface2); border:1px solid var(--border); border-radius:10px; font-size:13px; margin-bottom:10px; }
+.turn-name { font-weight:600; }
+
+/* UTIL */
+.hidden { display:none !important; }
+.mt8 { margin-top:8px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="header">
+    <div class="logo">📺</div>
+    <h1>CineSync</h1>
+    <div class="viewer-badge">VIEWER</div>
+  </div>
+
+  <!-- NAME SETUP -->
+  <div class="card" id="name-card">
+    <div class="card-label">Your Name</div>
+    <div class="name-row">
+      <input class="chat-input" id="my-name" placeholder="Enter your name…" maxlength="16" style="flex:1">
+      <button class="btn btn-green" onclick="joinSession()">Join 🎬</button>
+    </div>
+    <p style="font-size:12px;color:var(--muted);">This name appears in chat & Ludo. Make sure you're on the host's Wi-Fi hotspot!</p>
+  </div>
+
+  <div id="main-ui" class="hidden">
+
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('watch')">📺 Watch</button>
+      <button class="tab" onclick="switchTab('chat')">💬 Chat</button>
+      <button class="tab" onclick="switchTab('ludo')">🎲 Ludo</button>
+    </div>
+
+    <!-- WATCH -->
+    <div class="panel active" id="tab-watch">
+      <div id="waiting-screen" class="card">
+        <div class="waiting-screen">
+          <div class="big-icon">📡</div>
+          <h2>Waiting for host…</h2>
+          <p><span class="pulse-dot"></span>Connected — host will start soon.</p>
+          <p style="margin-top:10px;">While you wait, check out <b>Chat</b> and <b>Ludo</b> tabs!</p>
+        </div>
+      </div>
+
+      <div class="card hidden" id="video-card">
+        <div class="card-label">Now Watching</div>
+        <video id="video" playsinline webkit-playsinline></video>
+        <div class="status-bar">
+          <div class="status-left">
+            <div class="live-dot" id="live-dot"></div>
+            <div>
+              <div id="status-title">Synced</div>
+              <div class="status-sub" id="status-sub">Watching with friends</div>
+            </div>
+          </div>
+        </div>
+        <!-- Quick reactions in watch tab -->
+        <div style="margin-top:10px;">
+          <div class="reactions-bar">
+            <button class="rxn-btn" onclick="sendReaction('😂')">😂</button>
+            <button class="rxn-btn" onclick="sendReaction('😱')">😱</button>
+            <button class="rxn-btn" onclick="sendReaction('😍')">😍</button>
+            <button class="rxn-btn" onclick="sendReaction('👏')">👏</button>
+            <button class="rxn-btn" onclick="sendReaction('💀')">💀</button>
+            <button class="rxn-btn" onclick="sendReaction('🔥')">🔥</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CHAT -->
+    <div class="panel" id="tab-chat">
+      <div class="card">
+        <div class="card-label">Live Chat</div>
+        <div class="chat-box" id="chat-box">
+          <div style="text-align:center;color:var(--muted);font-size:12px;padding:20px 0;">Say hi to everyone! 👋</div>
+        </div>
+        <div class="chat-input-row">
+          <input class="chat-input" id="chat-input" placeholder="Type a message…" onkeydown="if(event.key==='Enter')sendChat()">
+          <button class="chat-send" onclick="sendChat()">➤</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-label">Reactions</div>
+        <div class="reactions-bar">
+          <button class="rxn-btn" onclick="sendReaction('😂')">😂</button>
+          <button class="rxn-btn" onclick="sendReaction('😱')">😱</button>
+          <button class="rxn-btn" onclick="sendReaction('😍')">😍</button>
+          <button class="rxn-btn" onclick="sendReaction('👏')">👏</button>
+          <button class="rxn-btn" onclick="sendReaction('💀')">💀</button>
+          <button class="rxn-btn" onclick="sendReaction('🔥')">🔥</button>
+          <button class="rxn-btn" onclick="sendReaction('🤯')">🤯</button>
+          <button class="rxn-btn" onclick="sendReaction('❤️')">❤️</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- LUDO -->
+    <div class="panel" id="tab-ludo">
+      <div class="card">
+        <div class="card-label">PowerLudo — Live Board</div>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:12px;">The host controls the game. Watch the board update live as everyone plays!</p>
+        <div class="turn-display">Turn: <span class="turn-name" id="turn-name">Waiting…</span></div>
+        <div id="ludo-board-wrap"></div>
+        <div class="ludo-log" id="ludo-log">Waiting for host to start…</div>
+      </div>
+    </div>
+
+  </div><!-- /main-ui -->
+
+</div><!-- /app -->
+
+<div id="rxn-container" style="position:fixed;inset:0;pointer-events:none;z-index:999;"></div>
+
+<script>
+const BC_CHANNEL = 'cinesync_v2';
+let bc;
+try { bc = new BroadcastChannel(BC_CHANNEL); bc.onmessage = onMsg; } catch(e){}
+
+const COLORS = ['r','g','b','y'];
+const COLOR_NAMES = {r:'Red', g:'Green', b:'Blue', y:'Yellow'};
+const COLOR_EMOJIS = {r:'🔴', g:'🟢', b:'🔵', y:'🟡'};
+
+let myName = '';
+let video;
+let ludoState = null;
+
+// ── JOIN ──
+function joinSession() {
+  myName = document.getElementById('my-name').value.trim() || 'Viewer';
+  document.getElementById('name-card').classList.add('hidden');
+  document.getElementById('main-ui').classList.remove('hidden');
+  
+  // Announce
+  const ping = {type:'viewer_hello', name: myName, _ts: Date.now()};
+  if (bc) bc.postMessage(ping);
+  localStorage.setItem('cinesync_viewer_ping', JSON.stringify({name:myName,_t:Date.now()}));
+
+  // Check for existing ludo state
+  try {
+    const ls = JSON.parse(localStorage.getItem('cinesync_ludo'));
+    if (ls) { ludoState = ls; renderLudoViewer(); updateTurnDisplay(); }
+  } catch(e){}
+
+  // Check for existing cmd
+  try {
+    const cmd = JSON.parse(localStorage.getItem('cinesync_cmd'));
+    if (cmd && Date.now() - cmd._ts < 30000) handlePlaybackCmd(cmd);
+  } catch(e){}
+}
+
+// ── MSG HANDLING ──
+function onMsg(e) {
+  const d = e.data;
+  if (!d) return;
+  if (['play','pause','seek','sync','end_session'].includes(d.type)) handlePlaybackCmd(d);
+  if (d.type === 'chat_msg') renderChatMsg(d);
+  if (d.type === 'reaction') showReactionFloat(d.emoji);
+  if (d.type === 'ludo_state') { ludoState = d.state; renderLudoViewer(); updateTurnDisplay(); }
+}
+
+window.addEventListener('storage', e => {
+  if (e.key === 'cinesync_cmd' && e.newValue) { try { handlePlaybackCmd(JSON.parse(e.newValue)); } catch(x){} }
+  if (e.key === 'cinesync_chat' && e.newValue) { try { renderChatMsg(JSON.parse(e.newValue)); } catch(x){} }
+  if (e.key === 'cinesync_reaction' && e.newValue) { try { showReactionFloat(JSON.parse(e.newValue).emoji); } catch(x){} }
+  if (e.key === 'cinesync_ludo' && e.newValue) { try { ludoState = JSON.parse(e.newValue); renderLudoViewer(); updateTurnDisplay(); } catch(x){} }
+});
+
+// ── PLAYBACK ──
+function handlePlaybackCmd(d) {
+  if (!video) video = document.getElementById('video');
+  if (d.type === 'play') {
+    seekTo(d.time);
+    video.play().catch(showTapToPlay);
+    setStatus('▶ Playing','Synced with host');
+    showVideoCard();
+  } else if (d.type === 'pause') {
+    seekTo(d.time);
+    video.pause();
+    setStatus('⏸ Paused','Host paused');
+  } else if (d.type === 'seek') {
+    seekTo(d.time);
+    setStatus('⏩ Seeking…','Syncing position');
+  } else if (d.type === 'sync') {
+    seekTo(d.time);
+    if (d.playing) video.play().catch(showTapToPlay); else video.pause();
+    setStatus(d.playing?'▶ Playing':'⏸ Paused','Re-synced');
+    showVideoCard();
+  } else if (d.type === 'end_session') {
+    setStatus('⛔ Session ended','Host ended the movie night');
+    video.pause();
+  }
+}
+
+function seekTo(t) {
+  if (t!==undefined && video && Math.abs(video.currentTime-t)>1) video.currentTime = t;
+}
+
+function showVideoCard() {
+  document.getElementById('waiting-screen').classList.add('hidden');
+  document.getElementById('video-card').classList.remove('hidden');
+}
+
+function showTapToPlay() {
+  setStatus('Tap video to play','Browser needs a tap first');
+  video.setAttribute('controls','');
+}
+
+function setStatus(title, sub) {
+  document.getElementById('status-title').textContent = title;
+  document.getElementById('status-sub').textContent = sub;
+}
+
+// ── TABS ──
+function switchTab(t) {
+  document.querySelectorAll('.tab').forEach((el,i)=>el.classList.toggle('active',['watch','chat','ludo'][i]===t));
+  document.querySelectorAll('.panel').forEach((el,i)=>el.classList.toggle('active',['tab-watch','tab-chat','tab-ludo'][i]==='tab-'+t));
+}
+
+// ── CHAT ──
+function sendChat() {
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  const msg = {type:'chat_msg', name:myName, text, isHost:false, _ts:Date.now()};
+  if (bc) bc.postMessage(msg);
+  localStorage.setItem('cinesync_chat', JSON.stringify(msg));
+  renderChatMsg({...msg, _fromMe:true});
+}
+
+function renderChatMsg(d) {
+  const box = document.getElementById('chat-box');
+  if (box.children.length===1 && box.firstChild.style?.textAlign==='center') box.innerHTML='';
+  
+  const isMe = d._fromMe || d.name===myName;
+  const colors=['#e05fff','#5fffb0','#5fafff','#ffcf5f','#ff5f7e'];
+  const color = d.isHost ? '#e05fff' : colors[Math.abs(hashStr(d.name||'?'))%colors.length];
+  const div = document.createElement('div');
+  div.className = 'chat-msg'+(isMe?' mine':'');
+  div.innerHTML = `
+    <div class="chat-avatar" style="background:${color}22;border:1px solid ${color}55">${(d.name||'?')[0].toUpperCase()}</div>
+    <div>
+      <div class="chat-name">${d.name||'?'}${d.isHost?' 👑':''}</div>
+      <div class="chat-bubble">${escHtml(d.text)}</div>
+    </div>`;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+function hashStr(s){let h=0;for(let c of s)h=(Math.imul(31,h)+c.charCodeAt(0))|0;return h;}
+function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+// ── REACTIONS ──
+function sendReaction(emoji) {
+  const pkg = {type:'reaction', emoji, _ts:Date.now()};
+  if (bc) bc.postMessage(pkg);
+  localStorage.setItem('cinesync_reaction', JSON.stringify(pkg));
+  showReactionFloat(emoji);
+}
+
+function showReactionFloat(emoji) {
+  const el = document.createElement('div');
+  el.className = 'rxn-float';
+  el.textContent = emoji;
+  el.style.left = (15+Math.random()*65)+'%';
+  el.style.bottom = '80px';
+  document.getElementById('rxn-container').appendChild(el);
+  setTimeout(()=>el.remove(), 2100);
+}
+
+// ── LUDO VIEWER ──
+const GAME_TRACK = [
+  [9,3],[8,3],[7,3],[6,3],[5,3],[5,2],[5,1],[5,0],
+  [4,0],[3,0],[3,1],[3,2],[3,3],[3,4],[3,5],[2,5],
+  [1,5],[0,5],[0,6],[1,6],[2,6],[3,6],[3,7],[3,8],
+  [3,9],[3,10],[4,10],[5,10],[5,9],[5,8],[5,7],[6,7],
+  [7,7],[8,7],[9,7],[10,7],[10,6],[10,5],[10,4],[10,3],
+  [9,3],[8,3],[9,5],[8,5],[7,5],[6,5],[5,6],[5,7],
+  [5,8],[5,9],[6,5],[7,5],
+];
+
+const START_POS = {r:0, g:13, b:26, y:39};
+
+function getCellStyle(r,c) {
+  if(r>=8&&r<=10&&c>=0&&c<=2) return 'background:#ff5f7e33;border:1px solid #ff5f7e22;';
+  if(r>=0&&r<=2&&c>=0&&c<=2) return 'background:#5fffb033;border:1px solid #5fffb022;';
+  if(r>=0&&r<=2&&c>=8&&c<=10) return 'background:#5fafff33;border:1px solid #5fafff22;';
+  if(r>=8&&r<=10&&c>=8&&c<=10) return 'background:#ffcf5f33;border:1px solid #ffcf5f22;';
+  if(r>=4&&r<=6&&c>=4&&c<=6) return 'background:linear-gradient(135deg,#e05fff22,#5fffb022);border:1px solid var(--border);';
+  return 'background:var(--surface2);border:1px solid var(--border);';
+}
+function getCellContent(r,c) {
+  if(r===5&&c===5) return '⭐';
+  const safes=[[2,1],[1,2],[8,1],[9,2],[1,8],[2,9],[8,9],[9,8]];
+  if(safes.some(([sr,sc])=>sr===r&&sc===c)) return '⭐';
+  if(r===10&&c===1) return '<span style="color:#ff5f7e;font-size:8px">R</span>';
+  if(r===1&&c===1) return '<span style="color:#5fffb0;font-size:8px">G</span>';
+  if(r===1&&c===9) return '<span style="color:#5fafff;font-size:8px">B</span>';
+  if(r===10&&c===9) return '<span style="color:#ffcf5f;font-size:8px">Y</span>';
+  return '';
+}
+
+function renderLudoViewer() {
+  if (!ludoState) return;
+  const wrap = document.getElementById('ludo-board-wrap');
+  
+  let board = document.getElementById('ludo-board-v');
+  if (!board) {
+    board = document.createElement('div');
+    board.className = 'ludo-board';
+    board.id = 'ludo-board-v';
+    for(let r=0;r<11;r++) for(let c=0;c<11;c++) {
+      const cell = document.createElement('div');
+      cell.id = `vlc-${r}-${c}`;
+      cell.style.cssText = getCellStyle(r,c);
+      cell.innerHTML = getCellContent(r,c);
+      board.appendChild(cell);
+    }
+    wrap.innerHTML = '';
+    wrap.appendChild(board);
+  }
+
+  // Clear pieces
+  document.querySelectorAll('.ludo-piece').forEach(el=>el.remove());
+
+  COLORS.forEach(col => {
+    ludoState.pieces[col].forEach((p,idx) => {
+      const piece = document.createElement('div');
+      piece.className = `ludo-piece piece-${col}`;
+      piece.textContent = idx+1;
+      piece.style.cssText = 'width:14px;height:14px;border-radius:50%;border:2px solid rgba(255,255,255,0.4);position:absolute;font-size:8px;display:flex;align-items:center;justify-content:center;font-weight:700;z-index:2;';
+      
+      if (p.pos===-1) {
+        const bases={r:[9,1],g:[1,1],b:[1,9],y:[9,9]};
+        const [br,bc]=bases[col];
+        const offR=[0,0,1,1][idx],offC=[0,1,0,1][idx];
+        const cell=document.getElementById(`vlc-${br+offR}-${bc+offC}`);
+        if(cell){cell.style.position='relative';cell.appendChild(piece);}
+      } else if(p.pos===52) {
+        const cell=document.getElementById('vlc-5-5');
+        if(cell) cell.appendChild(piece);
+      } else {
+        const coord=GAME_TRACK[p.pos%GAME_TRACK.length];
+        if(coord){const cell=document.getElementById(`vlc-${coord[0]}-${coord[1]}`);if(cell){cell.style.position='relative';cell.appendChild(piece);}}
+      }
+    });
+  });
+}
+
+function updateTurnDisplay() {
+  if (!ludoState) return;
+  const col = COLORS[ludoState.turn];
+  const el = document.getElementById('turn-name');
+  if (!el) return;
+  el.textContent = `${COLOR_EMOJIS[col]} ${COLOR_NAMES[col]}`;
+  el.style.color = {r:'#ff5f7e',g:'#5fffb0',b:'#5fafff',y:'#ffcf5f'}[col];
+  if (ludoState.winner) {
+    el.textContent = `🏆 ${COLOR_EMOJIS[ludoState.winner]} ${COLOR_NAMES[ludoState.winner]} WINS!`;
+  }
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  video = document.getElementById('video');
+  document.getElementById('my-name').addEventListener('keydown', e=>{ if(e.key==='Enter') joinSession(); });
+});
+</script>
+</body>
+</html>
